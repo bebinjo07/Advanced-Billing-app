@@ -17,11 +17,12 @@ import { SettingsView } from './components/settings/SettingsView';
 import { AuditLogsView } from './components/audit/AuditLogsView';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
+import { AuthPage } from './components/auth/AuthPage';
 import { db } from './db/database';
 import { Invoice } from './types';
 
 const MainAppContent: React.FC = () => {
-  const { businessProfile } = useAuth();
+  const { businessProfile, isAuthenticated } = useAuth();
   const { showToast } = useNotifications();
   const [activeView, setActiveView] = useState('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -32,6 +33,11 @@ const MainAppContent: React.FC = () => {
   const [showInvoiceBuilder, setShowInvoiceBuilder] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [viewingPrintInvoice, setViewingPrintInvoice] = useState<Invoice | null>(null);
+
+  // If user is not logged in, render Sign Up / Sign In Page
+  if (!isAuthenticated) {
+    return <AuthPage />;
+  }
 
   // Keyboard Shortcuts (Cmd/Ctrl + K)
   React.useEffect(() => {

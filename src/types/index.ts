@@ -4,11 +4,22 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string;
   role: UserRole;
   avatar?: string;
   phone?: string;
   active: boolean;
   createdAt: string;
+}
+
+export interface SignUpData {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  businessName: string;
+  businessState: string;
+  gstin?: string;
 }
 
 export interface BusinessProfile {
