@@ -166,19 +166,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const userId = 'usr_' + Math.random().toString(36).substring(2, 9);
+    const userRole: UserRole = data.accountType === 'customer' ? 'customer' : 'admin';
+
     const newUser: User = {
       id: userId,
       name: data.name.trim(),
       email: data.email.trim(),
       password: data.password,
-      role: 'admin',
+      role: userRole,
       phone: data.phone,
       active: true,
       createdAt: new Date().toISOString(),
     };
 
-    // Save to Local DB
+    // Save User to Local DB
     await db.users.add(newUser);
+
+    // If Customer Account, ensure Customer record exists in DB
+    if (data.accountType === 'customer') {
+      const existingCust = await db.customers.where('email').equalsIgnoreCase(data.email.trim()).first();
+      if (!existingCust) {
+        await db.customers.add({
+          id: 'cust_' + Math.random().toString(36).substring(2, 9),
+          name: data.name.trim(),
+          customerCode: 'CUST-' + Math.floor(100 + Math.random() * 900),
+          phone: data.phone || '',
+          email: data.email.trim(),
+          gstin: '',
+          billingAddress: 'Karnataka, India',
+          shippingAddress: 'Karnataka, India',
+          city: '',
+          state: 'Karnataka',
+          pincode: '',
+          totalPurchases: 0,
+          totalPaid: 0,
+          outstandingBalance: 0,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
 
     // Sync User to Neon PostgreSQL
     try {
@@ -193,13 +219,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Business Profile setup
     const bizId = 'biz_main';
+    const bizState = data.businessState || 'Karnataka';
+    const bizName = data.businessName ? data.businessName.trim() : 'My Business Store';
+
     const biz: BusinessProfile = {
       id: bizId,
-      name: data.businessName.trim(),
+      name: bizName,
       tagline: 'Quality Products & Professional Services',
-      address: `${data.businessState}, India`,
+      address: `${bizState}, India`,
       city: '',
-      state: data.businessState,
+      state: bizState,
       pincode: '',
       phone: data.phone || '',
       email: data.email.trim(),
@@ -211,7 +240,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bankName: 'HDFC Bank',
         accountNumber: '50200011223344',
         ifscCode: 'HDFC0001234',
-        branch: data.businessState,
+        branch: bizState,
         upiId: `${data.email.split('@')[0]}@upi`,
       },
       termsAndConditions:

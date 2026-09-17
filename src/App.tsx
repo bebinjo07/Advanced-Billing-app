@@ -18,11 +18,12 @@ import { AuditLogsView } from './components/audit/AuditLogsView';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { BarcodeScannerModal } from './components/common/BarcodeScannerModal';
 import { AuthPage } from './components/auth/AuthPage';
+import { CustomerPortalView } from './components/customerPortal/CustomerPortalView';
 import { db } from './db/database';
 import { Invoice } from './types';
 
 const MainAppContent: React.FC = () => {
-  const { businessProfile, isAuthenticated } = useAuth();
+  const { businessProfile, isAuthenticated, currentUser } = useAuth();
   const { showToast } = useNotifications();
   const [activeView, setActiveView] = useState('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -34,22 +35,10 @@ const MainAppContent: React.FC = () => {
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [viewingPrintInvoice, setViewingPrintInvoice] = useState<Invoice | null>(null);
 
-  // If user is not logged in, render Sign Up / Sign In Page
+  // Unauthenticated user -> render Auth Page
   if (!isAuthenticated) {
     return <AuthPage />;
   }
-
-  // Keyboard Shortcuts (Cmd/Ctrl + K)
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowSearchModal(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const handleViewInvoicePrint = async (invoiceId: string) => {
     const inv = await db.invoices.get(invoiceId);
@@ -63,9 +52,36 @@ const MainAppContent: React.FC = () => {
     else if (type === 'payment') setActiveView('payments');
   };
 
+  // Dedicated Customer Portal View for Customer Role
+  if (currentUser?.role === 'customer') {
+    return (
+      <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans">
+        <Navbar
+          activeView="customer"
+          onOpenSearch={() => setShowSearchModal(true)}
+          onQuickNewInvoice={() => {}}
+          onQuickAddCustomer={() => {}}
+          onQuickAddProduct={() => {}}
+          onToggleSidebarMobile={() => {}}
+        />
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+          <CustomerPortalView onViewInvoice={handleViewInvoicePrint} />
+        </main>
+
+        {viewingPrintInvoice && businessProfile && (
+          <InvoicePrintView
+            invoice={viewingPrintInvoice}
+            business={businessProfile}
+            onClose={() => setViewingPrintInvoice(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Business Owner / Admin Portal View
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans">
-      {/* Sidebar */}
       <Sidebar
         activeView={activeView}
         onNavigate={(view) => setActiveView(view)}
@@ -73,9 +89,7 @@ const MainAppContent: React.FC = () => {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Navbar */}
         <Navbar
           activeView={activeView}
           onOpenSearch={() => setShowSearchModal(true)}
@@ -88,7 +102,6 @@ const MainAppContent: React.FC = () => {
           onToggleSidebarMobile={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         />
 
-        {/* View Router Body */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           {activeView === 'dashboard' && (
             <DashboardView
@@ -143,7 +156,6 @@ const MainAppContent: React.FC = () => {
         </main>
       </div>
 
-      {/* Global Modals & Overlays */}
       <GlobalSearchModal
         isOpen={showSearchModal}
         onClose={() => setShowSearchModal(false)}

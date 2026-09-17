@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'staff';
+export type UserRole = 'admin' | 'manager' | 'staff' | 'customer';
 
 export interface User {
   id: string;
@@ -13,13 +13,15 @@ export interface User {
 }
 
 export interface SignUpData {
+  accountType: 'owner' | 'customer';
   name: string;
   email: string;
   password: string;
   phone: string;
-  businessName: string;
-  businessState: string;
+  businessName?: string;
+  businessState?: string;
   gstin?: string;
+  address?: string;
 }
 
 export interface BusinessProfile {

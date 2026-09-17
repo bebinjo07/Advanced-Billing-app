@@ -1,21 +1,35 @@
 import React, { useState } from 'react';
-import { Zap, Mail, Lock, User as UserIcon, Building, Phone, MapPin, Eye, EyeOff, CheckCircle2, ShieldCheck } from 'lucide-react';
+import {
+  Zap,
+  Mail,
+  Lock,
+  User as UserIcon,
+  Building,
+  Phone,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  ShieldCheck,
+  Briefcase,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getIndianStates, isValidGSTIN, isValidEmail } from '../../utils/validators';
 
 export const AuthPage: React.FC = () => {
   const { login, signup } = useAuth();
 
+  const [accountType, setAccountType] = useState<'owner' | 'customer'>('owner');
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Login Form State
+  // Sign In State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Sign Up Form State
+  // Sign Up State
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,7 +52,7 @@ export const AuthPage: React.FC = () => {
     setLoading(false);
 
     if (!success) {
-      setErrorMsg('Invalid email or password. If you don\'t have an account, click "Create Account".');
+      setErrorMsg('Invalid email or password. Click "Create Account" if you do not have an account yet.');
     }
   };
 
@@ -46,8 +60,13 @@ export const AuthPage: React.FC = () => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!name.trim() || !email.trim() || !password.trim() || !businessName.trim()) {
+    if (!name.trim() || !email.trim() || !password.trim()) {
       setErrorMsg('Please fill in all required fields.');
+      return;
+    }
+
+    if (accountType === 'owner' && !businessName.trim()) {
+      setErrorMsg('Please enter your business / shop name.');
       return;
     }
 
@@ -66,7 +85,7 @@ export const AuthPage: React.FC = () => {
       return;
     }
 
-    if (gstin && !isValidGSTIN(gstin)) {
+    if (accountType === 'owner' && gstin && !isValidGSTIN(gstin)) {
       setErrorMsg('Invalid GSTIN format. (e.g. 29AAACI9988H1Z4)');
       return;
     }
@@ -74,13 +93,14 @@ export const AuthPage: React.FC = () => {
     setLoading(true);
     try {
       await signup({
+        accountType,
         name: name.trim(),
         email: email.trim(),
         password,
         phone: phone.trim(),
-        businessName: businessName.trim(),
-        businessState,
-        gstin: gstin.trim().toUpperCase(),
+        businessName: accountType === 'owner' ? businessName.trim() : '',
+        businessState: accountType === 'owner' ? businessState : 'Karnataka',
+        gstin: accountType === 'owner' ? gstin.trim().toUpperCase() : '',
       });
     } catch (err: any) {
       setErrorMsg(err.message || 'Error creating account. Please try again.');
@@ -91,9 +111,9 @@ export const AuthPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4 font-sans">
-      <div className="w-full max-w-4xl bg-slate-800 rounded-2xl shadow-2xl border border-slate-700/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[600px]">
+      <div className="w-full max-w-4xl bg-slate-800 rounded-2xl shadow-2xl border border-slate-700/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[620px]">
         
-        {/* Left Hero / Brand Banner */}
+        {/* Left Hero Banner */}
         <div className="lg:col-span-5 bg-gradient-to-br from-emerald-600 to-teal-800 p-8 flex flex-col justify-between text-white relative overflow-hidden">
           <div className="absolute -top-10 -left-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
           <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-400/20 rounded-full blur-2xl"></div>
@@ -106,7 +126,7 @@ export const AuthPage: React.FC = () => {
               <span className="text-2xl font-black tracking-wide">BillPro GST</span>
             </div>
             <p className="text-emerald-100 text-xs mt-2 font-medium">
-              Advanced Billing, GST Invoicing & Inventory Engine
+              Separate Portals for Business Owners & Customers
             </p>
           </div>
 
@@ -114,24 +134,16 @@ export const AuthPage: React.FC = () => {
             <div className="flex items-start space-x-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0 mt-0.5" />
               <div className="text-xs text-emerald-50">
-                <span className="font-bold block">Auto Intra & Inter-state Tax</span>
-                Automatic CGST, SGST, IGST calculations based on place of supply.
+                <span className="font-bold block">🏢 Business Owner & Admin Portal</span>
+                Manage inventory, generate GST invoices, track expenses & view sales analytics.
               </div>
             </div>
 
             <div className="flex items-start space-x-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0 mt-0.5" />
               <div className="text-xs text-emerald-50">
-                <span className="font-bold block">Inventory Auto-Deduction</span>
-                Real-time stock deduction, low stock warnings & stock history.
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-300 shrink-0 mt-0.5" />
-              <div className="text-xs text-emerald-50">
-                <span className="font-bold block">PDF & Excel Reports</span>
-                Print PDF invoices with UPI QR codes & export GSTR-1 summaries.
+                <span className="font-bold block">👤 Customer Self-Service Portal</span>
+                Customers can view purchase invoices, download PDFs & pay balance online.
               </div>
             </div>
           </div>
@@ -141,12 +153,55 @@ export const AuthPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Auth Forms */}
+        {/* Right Auth Portal */}
         <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-center">
+          
+          {/* Account Type Selector Tabs */}
+          <div className="mb-6 space-y-2">
+            <label className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">
+              Select Account Type:
+            </label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900/80 rounded-xl border border-slate-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountType('owner');
+                  setErrorMsg('');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition ${
+                  accountType === 'owner'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                <span>Business Owner / Admin</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountType('customer');
+                  setErrorMsg('');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition ${
+                  accountType === 'customer'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Customer Account</span>
+              </button>
+            </div>
+          </div>
+
           {/* Header Controls */}
-          <div className="flex items-center justify-between border-b border-slate-700/80 pb-4 mb-6">
-            <h2 className="text-xl font-bold text-white">
-              {isSignUp ? 'Create New Business Account' : 'Welcome Back! Log In'}
+          <div className="flex items-center justify-between border-b border-slate-700/80 pb-3 mb-4">
+            <h2 className="text-lg font-bold text-white">
+              {isSignUp
+                ? `Create ${accountType === 'owner' ? 'Owner' : 'Customer'} Account`
+                : `${accountType === 'owner' ? 'Business Owner' : 'Customer'} Log In`}
             </h2>
             <button
               onClick={() => {
@@ -155,7 +210,7 @@ export const AuthPage: React.FC = () => {
               }}
               className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 underline"
             >
-              {isSignUp ? 'Already have an account? Log In' : 'New here? Create Account'}
+              {isSignUp ? 'Already registered? Log In' : 'New? Create Account'}
             </button>
           </div>
 
@@ -178,7 +233,7 @@ export const AuthPage: React.FC = () => {
                   <input
                     type="email"
                     required
-                    placeholder="e.g. admin@company.com"
+                    placeholder={accountType === 'owner' ? 'admin@company.com' : 'customer@gmail.com'}
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -215,18 +270,22 @@ export const AuthPage: React.FC = () => {
                 disabled={loading}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm transition shadow-lg shadow-emerald-600/30 flex items-center justify-center space-x-2"
               >
-                {loading ? <span>Logging in...</span> : <span>Log In to Dashboard</span>}
+                {loading ? (
+                  <span>Logging in...</span>
+                ) : (
+                  <span>Log In as {accountType === 'owner' ? 'Business Owner' : 'Customer'}</span>
+                )}
               </button>
 
               <div className="text-center pt-2">
                 <span className="text-xs text-slate-400">
-                  First time visiting?{' '}
+                  Don't have an account?{' '}
                   <button
                     type="button"
                     onClick={() => setIsSignUp(true)}
                     className="text-emerald-400 hover:underline font-semibold"
                   >
-                    Register your business here
+                    Register here
                   </button>
                 </span>
               </div>
@@ -237,7 +296,7 @@ export const AuthPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Your Full Name *
+                    Full Name *
                   </label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -261,7 +320,7 @@ export const AuthPage: React.FC = () => {
                     <input
                       type="email"
                       required
-                      placeholder="rahul@business.in"
+                      placeholder="rahul@domain.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -299,76 +358,104 @@ export const AuthPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {accountType === 'owner' ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        Business / Shop Name *
+                      </label>
+                      <div className="relative">
+                        <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Apex Traders"
+                          value={businessName}
+                          onChange={(e) => setBusinessName(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        Business State *
+                      </label>
+                      <select
+                        value={businessState}
+                        onChange={(e) => setBusinessState(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {getIndianStates().map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="98765 43210"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-300 block mb-1">
+                        GSTIN (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="29AAACI9988H1Z4"
+                        value={gstin}
+                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                        className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Customer Phone */
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Business / Shop Name *
+                    Phone Number *
                   </label>
                   <div className="relative">
-                    <Building className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Apex Traders"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="98765 43210"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Business State *
-                  </label>
-                  <select
-                    value={businessState}
-                    onChange={(e) => setBusinessState(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {getIndianStates().map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="98765 43210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    GSTIN (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="29AAACI9988H1Z4"
-                    value={gstin}
-                    onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 bg-slate-700/60 border border-slate-600 rounded-lg text-xs text-white placeholder-slate-400 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
+              )}
 
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition shadow-lg shadow-emerald-600/30 flex items-center justify-center space-x-2"
               >
-                {loading ? <span>Creating Account...</span> : <span>Create Account & Start Billing</span>}
+                {loading ? (
+                  <span>Creating Account...</span>
+                ) : (
+                  <span>
+                    Create {accountType === 'owner' ? 'Business Owner' : 'Customer'} Account
+                  </span>
+                )}
               </button>
             </form>
           )}
