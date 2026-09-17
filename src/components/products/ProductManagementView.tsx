@@ -18,6 +18,7 @@ import { Product, Category, Supplier } from '../../types';
 import { formatCurrency } from '../../utils/numberToWords';
 import { useNotifications } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
+import { syncProductToNeon } from '../../db/neonSync';
 
 interface ProductManagementViewProps {
   onOpenCreate: () => void;
@@ -128,6 +129,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     };
 
     await db.products.put(pData);
+    syncProductToNeon(pData).catch(console.error);
     showToast(`Product ${pData.name} saved successfully!`, 'success');
     setShowProductModal(false);
   };

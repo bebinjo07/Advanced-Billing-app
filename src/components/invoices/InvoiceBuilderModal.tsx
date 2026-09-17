@@ -9,6 +9,7 @@ import {
   calculateInvoiceTotals,
   ItemCalculationInput,
 } from '../../utils/gstCalculator';
+import { syncInvoiceToNeon, syncProductToNeon, syncCustomerToNeon } from '../../db/neonSync';
 import { getIndianStates, isValidGSTIN } from '../../utils/validators';
 import { formatCurrency } from '../../utils/numberToWords';
 
@@ -296,6 +297,7 @@ export const InvoiceBuilderModal: React.FC<InvoiceBuilderModalProps> = ({
     };
 
     await db.invoices.put(invoiceData);
+    syncInvoiceToNeon(invoiceData).catch(console.error);
 
     // Update Customer Totals & Balances
     if (selectedCustomerId) {

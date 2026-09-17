@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole, BusinessProfile, SignUpData } from '../types';
 import { db } from '../db/database';
-import { seedInitialDataIfNeeded } from '../db/seedData';
+import { sql, initNeonTables } from '../db/neonClient';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -31,20 +31,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     async function init() {
       try {
-        await seedInitialDataIfNeeded();
-        const users = await db.users.toArray();
-        setAllUsers(users);
+        // Initialize Neon PostgreSQL Cloud Tables
+        await initNeonTables();
 
-        const savedUserId = localStorage.getItem('activeUserId');
-        if (savedUserId) {
-          const user = users.find((u) => u.id === savedUserId);
-          if (user) {
-            setCurrentUser(user);
+        // 1. Fetch Users from Neon PostgreSQL (with fallback to local db)
+        try {
+          const neonUsers = (await sql`SELECT * FROM users ORDER BY created_at ASC`) as any[];
+          if (neonUsers && neonUsers.length > 0) {
+            const formattedUsers: User[] = neonUsers.map((u) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              password: u.password,
+              role: u.role,
+              phone: u.phone,
+              active: u.active,
+              createdAt: u.created_at,
+            }));
+            setAllUsers(formattedUsers);
+            await db.users.bulkPut(formattedUsers);
+          } else {
+            const localUsers = await db.users.toArray();
+            setAllUsers(localUsers);
           }
+        } catch (e) {
+          const localUsers = await db.users.toArray();
+          setAllUsers(localUsers);
         }
 
-        const biz = await db.businessProfile.toCollection().first();
-        if (biz) setBusinessProfile(biz);
+        // 2. Fetch Business Profile from Neon PostgreSQL
+        try {
+          const neonBiz = (await sql`SELECT * FROM business_profiles LIMIT 1`) as any[];
+          if (neonBiz && neonBiz.length > 0) {
+            const b = neonBiz[0];
+            const profile: BusinessProfile = {
+              id: b.id,
+              name: b.name,
+              tagline: b.tagline,
+              logo: b.logo,
+              address: b.address,
+              city: b.city,
+              state: b.state,
+              pincode: b.pincode,
+              phone: b.phone,
+              email: b.email,
+              website: b.website,
+              gstin: b.gstin,
+              pan: b.pan,
+              currency: b.currency || 'INR',
+              currencySymbol: b.currency_symbol || '₹',
+              invoicePrefix: b.invoice_prefix || 'INV-2026-',
+              bankDetails: b.bank_details || {
+                bankName: 'HDFC Bank',
+                accountNumber: '',
+                ifscCode: '',
+                branch: '',
+                upiId: '',
+              },
+              termsAndConditions: b.terms_and_conditions || '',
+              taxRegistrationType: b.tax_registration_type || 'Regular',
+            };
+            setBusinessProfile(profile);
+            await db.businessProfile.put(profile);
+          } else {
+            const localBiz = await db.businessProfile.toCollection().first();
+            if (localBiz) setBusinessProfile(localBiz);
+          }
+        } catch (e) {
+          const localBiz = await db.businessProfile.toCollection().first();
+          if (localBiz) setBusinessProfile(localBiz);
+        }
+
+        // Restore Session
+        const savedUserId = localStorage.getItem('activeUserId');
+        if (savedUserId) {
+          const usersList = await db.users.toArray();
+          const user = usersList.find((u) => u.id === savedUserId);
+          if (user) setCurrentUser(user);
+        }
       } catch (err) {
         console.error('Failed to initialize AuthContext:', err);
       } finally {
@@ -55,9 +119,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    const user = await db.users.where('email').equalsIgnoreCase(email.trim()).first();
+    let user = await db.users.where('email').equalsIgnoreCase(email.trim()).first();
+
+    if (!user) {
+      // Query Neon DB
+      try {
+        const neonUser = (await sql`SELECT * FROM users WHERE LOWER(email) = LOWER(${email.trim()}) LIMIT 1`) as any[];
+        if (neonUser && neonUser.length > 0) {
+          const u = neonUser[0];
+          user = {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            password: u.password,
+            role: u.role,
+            phone: u.phone,
+            active: u.active,
+            createdAt: u.created_at,
+          };
+          await db.users.put(user);
+        }
+      } catch (e) {
+        console.error('Neon DB Login query error:', e);
+      }
+    }
+
     if (user && user.active) {
-      // If password stored, verify matching
       if (user.password && password && user.password !== password) {
         return false;
       }
@@ -72,6 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (data: SignUpData): Promise<void> => {
+    // Check if email exists in local db or Neon
     const existing = await db.users.where('email').equalsIgnoreCase(data.email.trim()).first();
     if (existing) {
       throw new Error('An account with this email already exists.');
@@ -89,71 +177,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
 
+    // Save to Local DB
     await db.users.add(newUser);
 
-    // Create business profile for new account
-    const bizCount = await db.businessProfile.count();
-    let biz: BusinessProfile;
-    if (bizCount === 0) {
-      biz = {
-        id: 'biz_main',
-        name: data.businessName.trim(),
-        tagline: 'Quality Products & Professional Services',
-        address: `${data.businessState}, India`,
-        city: '',
-        state: data.businessState,
-        pincode: '',
-        phone: data.phone || '',
-        email: data.email.trim(),
-        gstin: data.gstin?.trim().toUpperCase() || '',
-        currency: 'INR',
-        currencySymbol: '₹',
-        invoicePrefix: 'INV-2026-',
-        bankDetails: {
-          bankName: 'HDFC Bank',
-          accountNumber: '50200011223344',
-          ifscCode: 'HDFC0001234',
-          branch: data.businessState,
-          upiId: `${data.email.split('@')[0]}@upi`,
-        },
-        termsAndConditions:
-          '1. Goods once sold are subject to standard warranty.\n2. Payment due within 15 days of invoice date.\n3. Subject to local state jurisdiction.',
-        taxRegistrationType: data.gstin ? 'Regular' : 'Unregistered',
-      };
-      await db.businessProfile.add(biz);
-    } else {
-      const existingBiz = await db.businessProfile.toCollection().first();
-      biz = existingBiz || {
-        id: 'biz_main',
-        name: data.businessName,
-        address: data.businessState,
-        city: '',
-        state: data.businessState,
-        pincode: '',
-        phone: data.phone,
-        email: data.email,
-        gstin: data.gstin || '',
-        currency: 'INR',
-        currencySymbol: '₹',
-        invoicePrefix: 'INV-2026-',
-        bankDetails: {
-          bankName: '',
-          accountNumber: '',
-          ifscCode: '',
-          branch: '',
-          upiId: '',
-        },
-        termsAndConditions: '',
-        taxRegistrationType: 'Regular',
-      };
+    // Sync User to Neon PostgreSQL
+    try {
+      await sql`
+        INSERT INTO users (id, name, email, password, role, phone, active)
+        VALUES (${newUser.id}, ${newUser.name}, ${newUser.email}, ${newUser.password}, ${newUser.role}, ${newUser.phone}, TRUE)
+        ON CONFLICT (email) DO NOTHING;
+      `;
+    } catch (e) {
+      console.error('Neon DB User Insert Sync Error:', e);
+    }
+
+    // Business Profile setup
+    const bizId = 'biz_main';
+    const biz: BusinessProfile = {
+      id: bizId,
+      name: data.businessName.trim(),
+      tagline: 'Quality Products & Professional Services',
+      address: `${data.businessState}, India`,
+      city: '',
+      state: data.businessState,
+      pincode: '',
+      phone: data.phone || '',
+      email: data.email.trim(),
+      gstin: data.gstin?.trim().toUpperCase() || '',
+      currency: 'INR',
+      currencySymbol: '₹',
+      invoicePrefix: 'INV-2026-',
+      bankDetails: {
+        bankName: 'HDFC Bank',
+        accountNumber: '50200011223344',
+        ifscCode: 'HDFC0001234',
+        branch: data.businessState,
+        upiId: `${data.email.split('@')[0]}@upi`,
+      },
+      termsAndConditions:
+        '1. Goods once sold are subject to standard warranty.\n2. Payment due within 15 days of invoice date.\n3. Subject to local state jurisdiction.',
+      taxRegistrationType: data.gstin ? 'Regular' : 'Unregistered',
+    };
+
+    await db.businessProfile.put(biz);
+
+    // Sync Business Profile to Neon PostgreSQL
+    try {
+      await sql`
+        INSERT INTO business_profiles (id, name, tagline, address, city, state, phone, email, gstin, currency, currency_symbol, invoice_prefix, bank_details, terms_and_conditions, tax_registration_type)
+        VALUES (${biz.id}, ${biz.name}, ${biz.tagline}, ${biz.address}, ${biz.city}, ${biz.state}, ${biz.phone}, ${biz.email}, ${biz.gstin}, ${biz.currency}, ${biz.currencySymbol}, ${biz.invoicePrefix}, ${JSON.stringify(biz.bankDetails)}, ${biz.termsAndConditions}, ${biz.taxRegistrationType})
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state, gstin = EXCLUDED.gstin;
+      `;
+    } catch (e) {
+      console.error('Neon DB Business Insert Sync Error:', e);
     }
 
     setBusinessProfile(biz);
     setCurrentUser(newUser);
     localStorage.setItem('activeUserId', userId);
 
-    const users = await db.users.toArray();
-    setAllUsers(users);
+    const usersList = await db.users.toArray();
+    setAllUsers(usersList);
   };
 
   const logout = () => {
@@ -188,6 +272,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = { ...businessProfile, ...data };
     await db.businessProfile.put(updated);
     setBusinessProfile(updated);
+
+    try {
+      await sql`
+        UPDATE business_profiles
+        SET name = ${updated.name}, tagline = ${updated.tagline}, address = ${updated.address}, city = ${updated.city}, state = ${updated.state}, pincode = ${updated.pincode}, phone = ${updated.phone}, email = ${updated.email}, gstin = ${updated.gstin}, invoice_prefix = ${updated.invoicePrefix}, bank_details = ${JSON.stringify(updated.bankDetails)}, terms_and_conditions = ${updated.termsAndConditions}
+        WHERE id = ${updated.id};
+      `;
+    } catch (e) {
+      console.error('Neon DB Business Profile Update Sync Error:', e);
+    }
   };
 
   const addUser = async (userData: Omit<User, 'id' | 'createdAt'>) => {
@@ -197,14 +291,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
     await db.users.add(newUser);
-    const users = await db.users.toArray();
-    setAllUsers(users);
+
+    try {
+      await sql`
+        INSERT INTO users (id, name, email, password, role, phone, active)
+        VALUES (${newUser.id}, ${newUser.name}, ${newUser.email}, ${newUser.password || ''}, ${newUser.role}, ${newUser.phone || ''}, TRUE);
+      `;
+    } catch (e) {
+      console.error('Neon DB Add User Error:', e);
+    }
+
+    const usersList = await db.users.toArray();
+    setAllUsers(usersList);
   };
 
   const updateUser = async (id: string, data: Partial<User>) => {
     await db.users.update(id, data);
-    const users = await db.users.toArray();
-    setAllUsers(users);
+    const usersList = await db.users.toArray();
+    setAllUsers(usersList);
     if (currentUser && currentUser.id === id) {
       setCurrentUser({ ...currentUser, ...data });
     }
@@ -212,8 +316,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteUser = async (id: string) => {
     await db.users.delete(id);
-    const users = await db.users.toArray();
-    setAllUsers(users);
+    try {
+      await sql`DELETE FROM users WHERE id = ${id};`;
+    } catch (e) {
+      console.error('Neon DB Delete User Error:', e);
+    }
+    const usersList = await db.users.toArray();
+    setAllUsers(usersList);
   };
 
   if (loading) {
@@ -221,7 +330,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       <div className="flex h-screen w-screen items-center justify-center bg-slate-900 text-white font-sans">
         <div className="text-center space-y-4">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent"></div>
-          <p className="text-lg font-medium text-slate-300">Initializing BillPro Application...</p>
+          <p className="text-lg font-medium text-slate-300">Connecting to Neon Cloud Database...</p>
         </div>
       </div>
     );
